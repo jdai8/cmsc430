@@ -8,6 +8,7 @@
          prim-applyname
          datum?
          read-begin
+         read-all
          test-final
          test-top-level
          test-desugar
@@ -187,15 +188,13 @@
          [else (pretty-print `(bad-scheme ,e ,env)) #f]))
 
 
-(define (test-final compile e)
-  (define val1 (eval-top-level e))
+(define (test-final compile val1 e)
   (define llvm (compile e))
   (define val2 (eval-llvm llvm))
   (if (equal? val1 val2)
     #t
     (begin
-      (display (format "Test-top-level: two different values (~a and ~a) before and after top-level processing\n"
-                       val1 val2)))))
+      (display (format "Test-final: expected ~a, got ~a\n" val1 val2)))))
 
 
 (define (eval-top-level e)

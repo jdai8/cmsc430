@@ -9,18 +9,29 @@
 (require "compile.rkt")
 
 
-; simplified testing
 (define testdir "tests")
+
 (define (path->test file)
   (define path (build-path testdir file))
   (cons (path->string file)
         (lambda ()
-          (define prog (with-input-from-file path read-begin #:mode 'text))
-          (test-final compile prog)
-          )))
+          (call-with-input-file
+            path 
+            (lambda (input)
+              (define s (port->string input))
+              (define prog (read-begin (open-input-string s)))
+              (define expected-val
+                (if (string-prefix? s ";")
+                  ; pull out the expected error value
+                  (read (open-input-string (substring (car (string-split s "\n")) 1)))
+                  (eval-top-level prog)))
+              (test-final compile expected-val prog))))))
 
 (define tests
-  (map path->test (directory-list testdir)))
+  (map path->test 
+       (filter (lambda (p)
+                 (not (string-suffix? (path->string p) "swp")))
+               (directory-list testdir))))
 
 (define (run-test/internal is-repl . args)
   ;; Run all tests, a specific test, or print the available tests

@@ -230,9 +230,20 @@
          ; guard so we don't desugar already desugared things
          [`(apply-prim ,x ...)
            `(apply-prim ,@x)]
+
+         ; solve divide by zero
+         [`(/ ,a ,b)
+           `(if (prim = ,b '0)
+              ,(desugar-aux '(raise '1))
+              (prim / ,a ,b))]
+         ['/
+          `(lambda (a b)
+             ,(desugar-aux '(/ a b)))]
+
          [`(prim ,x ...)
            `(prim ,@x)]
 
+         ; eta-expand prims
          [(? prim? p)
           `(lambda x (apply-prim ,p x))]
 
