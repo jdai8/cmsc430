@@ -26,7 +26,7 @@
                                x
                                (loop (cdr x) (cdr y))))))]
           [%do-wind (lambda (new)
-                      (unless (eq? new %wind-stack) 
+                      (unless (eq? new %wind-stack)
                         (let ([tail (common-tail new %wind-stack)])
                           (begin
                             (let f ((l %wind-stack))
@@ -69,7 +69,7 @@
                 (let ,(map (lambda (i e) (list (i->temp i) e))
                              (range (length e0s))
                              e0s)
-                  (begin ,@(map (lambda (i x) `(set! ,x ,(i->temp i))) 
+                  (begin ,@(map (lambda (i x) `(set! ,x ,(i->temp i)))
                                 (range (length e0s))
                                 xs)
                          ,e1))))]
@@ -97,8 +97,11 @@
            (define params (gensym 'params))
             `(lambda ,params
                ,(desugar-aux
-                  `(let* ,(foldr (lambda (x binds) 
-                                   (append `([,x (car ,params)] [,params (cdr ,params)])
+                  `(let* ,(foldr (lambda (x binds)
+                                   ; handle too few arguments
+                                   (append `([_ (if (null? ,params) (halt 'too-few-args!) 'foo)]
+                                             [,x (car ,params)]
+                                             [,params (cdr ,params)])
                                            binds))
                                  `([,last ,params])
                                  xs)
@@ -120,7 +123,7 @@
                     (lambda () (set! %handler-stack (cdr %handler-stack)))))))]
 
          [`(raise ,e)
-           (desugar-aux 
+           (desugar-aux
              `((car %handler-stack) (cons ,e '())))]
 
          [`(delay ,e)
@@ -129,15 +132,15 @@
                     [_saved-value '()]
                     [_thunk (lambda () ,e)])
                 (lambda (action)
-                  (case action 
+                  (case action
                     [(promise?) 'yes-promise]
-                    [(force) (if _has-value _saved-value 
-                               (begin 
+                    [(force) (if _has-value _saved-value
+                               (begin
                                  (set! _saved-value (_thunk))
                                  (set! _has-value '#t)
                                  _saved-value))]))))]
 
-         [`(force ,p) 
+         [`(force ,p)
            (desugar-aux `(,p 'force))]
 
          ['promise?
@@ -150,7 +153,7 @@
          [`(and ,e ...)
            (if (null? e)
              ''#t
-             (desugar-aux 
+             (desugar-aux
                (match-let ([(cons h t) e])
                  (if (null? t)
                    h
@@ -159,7 +162,7 @@
          [`(or ,e ...)
            (if (null? e)
              ''#f
-             (desugar-aux 
+             (desugar-aux
                (match-let ([(cons h t) e])
                  (if (null? t)
                    h
@@ -168,12 +171,12 @@
                         (if ,t ,t (or ,@(cdr e)))))))))]
 
          [`(cond ,cond-clauses ...)
-           (desugar-aux 
-             (foldr (lambda (cond-clause a) 
+           (desugar-aux
+             (foldr (lambda (cond-clause a)
                       (match cond-clause
                              [`(else ,e) e]
                              [`(,t ,e) `(if ,t ,e ,a)]
-                             [`(,e) 
+                             [`(,e)
                                (let ([t (gensym)])
                                  `(let ([,t ,e])
                                     (if ,t ,t ,a)))]))
@@ -198,7 +201,7 @@
          [`(when ,e0 ,e1)
            (desugar-aux `(if ,e0 ,e1 (void)))]
 
-         [`(unless ,e0 ,e1) 
+         [`(unless ,e0 ,e1)
            (desugar-aux `(if ,e0 (void) ,e1))]
 
          [`(set! ,x ,e)

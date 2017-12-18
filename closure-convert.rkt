@@ -12,10 +12,8 @@
          closure-convert
          proc->llvm)
 
-
 ; Whether to optimize vararg conversion using static analysis (0-cfa) results
 (define optimize-varargs #t)
-
 
 ; Pass that removes lambdas and datums as atomic and forces them to be let-bound
 ;   ...also performs a few small optimizations
@@ -30,7 +28,7 @@
                                (cons (cons gx (car xs+wrap))
                                      (lambda (e)
                                        (match ae
-                                              [`(lambda ,xs ,body) 
+                                              [`(lambda ,xs ,body)
                                                `(let ([,gx (lambda ,xs ,(simplify-ae body))])
                                                   ,((cdr xs+wrap) e))]
                                               [`',dat
@@ -79,13 +77,12 @@
              (apply ,x ,xd))]
          [`(apply ,(? symbol? x0) ,(? symbol? x1))
           `(apply ,x0 ,x1)]
-         
+
          [`(,aes ...)
           (wrap-aes aes (lambda (xs) xs))]))
 
-
-(define (successors exp store) 
-  (define (lookup x) (hash-ref store x set)) 
+(define (successors exp store)
+  (define (lookup x) (hash-ref store x set))
   (match exp
          [`(let ([,x (quote ,dat)]) ,e0)
           (cons (set e0) store)]
@@ -140,7 +137,7 @@
                           [else succs+store]))
                  (cons (set) store)
                  (set->list (lookup f)))]
-         [`(,f ,as ...) 
+         [`(,f ,as ...)
           (foldl (lambda (lam succs+store)
                    (match-define (cons succs store) succs+store)
                    (match lam
@@ -162,7 +159,6 @@
                  (cons (set) store)
                  (set->list (lookup f)))]))
 
-
 ; utility functions
 (define (graph-extend graph e0 succs)
   (foldl (lambda (succ graph)
@@ -173,7 +169,6 @@
   (hash-set store x (set-union (store-ref store x) (if (set? val) val (set val)))))
 (define (store-ref store x)
   (hash-ref store x set))
-
 
 ; Run 0-CFA analysis (times out and returns (cons #f #f) if too expensive)
 (define (0-cfa exp)
@@ -197,8 +192,6 @@
                    (cons #f #f))
             (loop graph+ store+)))))
 
-
-
 ; computes a mapping from callsites or lambdas to the corresponding lambdas or callsites (respectively)
 (define (callsites-lambdas cfg store)
   (define calls-to-lambdas
@@ -220,13 +213,11 @@
          calls-to-lambdas
          (hash-keys calls-to-lambdas)))
 
-
 (define (shallow e [n 2])
   (match e
    [`(,es ...) #:when (<= n 0) '...]
    [`(,es ...) (map (lambda (e) (shallow e (- n 1))) es)]
    [else e]))
-
 
 ; Computes a set of lambdas/callsites to be converted to use variable arguments
 ; (using the output of callsites-lambdas)
@@ -264,8 +255,7 @@
         (fixpoint st+)))
   (fixpoint (set)))
 
-
-(define (remove-varargs e vst) 
+(define (remove-varargs e vst)
   (match e
          [`(let ([,x ',dat]) ,e0)
           `(let ([,x ',dat]) ,(remove-varargs e0 vst))]
@@ -276,14 +266,34 @@
          [`(let ([,x (lambda (,xs ...) ,body)]) ,e0)
           #:when (or (not vst) (set-member? vst `(lambda ,xs ,body)))
           (define gx (gensym 'rvp))
+          (define n1 (gensym 'null))
+          (define many (gensym 'many))
+          (define last (gensym 'last))
+          (define hlt (gensym 'hlt))
+
           (define gx+e
             (foldr (lambda (x gx+e)
                      (define gx (gensym 'rvp))
+                     (define n0 (gensym 'null))
+                     (define few (gensym 'few))
+                     (define hlt (gensym 'hlt))
+                     ; handle too few, too many args
                      (cons gx
-                           `(let ([,x (prim car ,gx)])
-                              (let ([,(car gx+e) (prim cdr ,gx)])
-                                ,(cdr gx+e)))))
-                   (cons (gensym 'na) (remove-varargs body vst))
+                           `(let ([,n0 (prim null? ,gx)])
+                              (if ,n0
+                                (let ([,few 'too-few-args!])
+                                  (let ([,hlt (prim halt ,few)])
+                                    (,hlt ,hlt)))
+                                (let ([,x (prim car ,gx)])
+                                  (let ([,(car gx+e) (prim cdr ,gx)])
+                                    ,(cdr gx+e)))))))
+                   (cons last
+                         `(let ([,n1 (prim null? ,last)])
+                            (if ,n1
+                              ,(remove-varargs body vst)
+                              (let ([,many 'too-many-args!])
+                                (let ([,hlt (prim halt ,many)])
+                                  (,hlt ,hlt))))))
                    xs))
           `(let ([,x (lambda (,(car gx+e)) ,(cdr gx+e))])
              ,(remove-varargs e0 vst))]
@@ -296,7 +306,7 @@
          [`(if ,x ,e0 ,e1)
           `(if ,x ,(remove-varargs e0 vst) ,(remove-varargs e1 vst))]
          [`(apply ,f ,args)
-          `(,f ,args)] 
+          `(,f ,args)]
          [`(,f ,xs ...)
           #:when (or (not vst) (set-member? vst e))
           (define gx+e
@@ -314,8 +324,6 @@
              ,(cdr gx+e))]
          [`(,f ,xs ...)
           `(,f . ,xs)]))
-
-
 
 (define (T-bottom-up e procs)
   (match e
@@ -360,28 +368,26 @@
                 `(if ,x ,e0+ ,e1+)
                 procs1+)]
          [`(,f ,xs ...)
-          (list (list->set `(,f ,@xs)) 
+          (list (list->set `(,f ,@xs))
                 `(clo-app ,f ,@xs)
                 procs)]))
-
 
 ; call simplify-ae on input to closure convert, then cfa-0, then walk ast
 (define (closure-convert cps)
   (define scps (simplify-ae cps))
   (match-define (cons cfg store) (0-cfa scps))
   (if (and optimize-varargs cfg store)
-      (let () 
+      (let ()
         (define call-lam-map (callsites-lambdas cfg store))
         (define vararg-set (compute-vararg-set call-lam-map))
         ;(pretty-print `(vararg-set-size ,(set-count vararg-set)))
         (define no-varargs-cps (remove-varargs scps vararg-set))
         (match-define `(,freevars ,main-body ,procs) (T-bottom-up no-varargs-cps '()))
         `((proc (main) ,main-body) . ,procs))
-      (let () 
+      (let ()
         (define no-varargs-cps (remove-varargs scps #f))
         (match-define `(,freevars ,main-body ,procs) (T-bottom-up no-varargs-cps '()))
         `((proc (main) ,main-body) . ,procs))))
-
 
 (define (proc->llvm procs)
   (define globals "")
@@ -471,7 +477,7 @@
                      ,(comment-line
                        "  %" (s-> fptrptr) " = getelementptr inbounds i64, i64* %" (s-> cptr) ", i64 0"
                        (string-append "&" (s-> cptr) "[0]"))
-                     ,(comment-line 
+                     ,(comment-line
                         "  %" (s-> f) " = ptrtoint void(i64"
                         (foldr string-append "" (map (lambda (_) ",i64")
                                                      (range (- n 1))))
@@ -580,7 +586,7 @@
              ;;"call void @print_u64(i64 " (number->string (random 100000 999999)) ")\n"  ; useful for debugging
              (e->llvm e0)
              "}\n")]))
-  
+
   (define llvm-procs
     (apply string-append
            (map (lambda (s) (string-append s "\n\n"))
@@ -588,8 +594,5 @@
   (string-append llvm-procs
                  "\n\n\n"
                  globals))
-
-
-
 
 
