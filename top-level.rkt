@@ -104,7 +104,13 @@
     [`(call/cc ,e)
       `(call/cc ,(top-level e))]
     [`(apply ,e1 ,e2)
-      `(apply ,(top-level e1) ,(top-level e2))]
+      (if (prim? e1) 
+        `(apply ,(top-level e1) ,(top-level e2))
+        (let ([gf (gensym 'f)])
+          `(let ([,gf ,(top-level e1)])
+             (if (procedure? ,gf)
+               (apply ,gf ,(top-level e2))
+               (raise '5)))))]
 
     [`(quasiquote ,qq)
       (match qq
@@ -140,8 +146,14 @@
      '(quote #f)]
     [(? symbol?)
      e]
-    [`(,es ...)
-      (map top-level es)])) 
+    [`(,f ,args ...)
+      (if (prim? f)
+        (map top-level (cons f args))
+        (let ([gf (gensym 'f)])
+          `(let ([,gf ,(top-level f)])
+             (if (procedure? ,gf)
+               (,gf ,@(map top-level args))
+               (raise '5)))))]))
 
 ; I, Jack Dai, pledge on my honor that I have not given or received any
 ;unauthorized assistance on this assignment.

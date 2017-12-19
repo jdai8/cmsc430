@@ -2,6 +2,12 @@
 
 A Scheme compiler that targets LLVM IR.
 
+```bash
+racket compile.rkt tests/amb.scm
+./amb
+racket tests.rkt all
+```
+
 ## Part 1 - Primitive operations
 
 ### Math
@@ -42,6 +48,8 @@ A Scheme compiler that targets LLVM IR.
 
 - `append : List, x -> y` - adds the second argument to the end of the list.
 
+- `list : x ... -> List` - creates a list with its arguments.
+
 ### Other
 
 - `void : () -> void` - returns void.
@@ -50,8 +58,11 @@ A Scheme compiler that targets LLVM IR.
 
 ## Part 2 - Error handling
 
-These errors now raise integer exceptions between 1 and 5 (based on the order below).
-Using integers is easier for checking exception types, since we have `eq?` and `=`, but not `equal?`.
+Tests that produce errors have a comment at the top with their expected value. 
+This gets `read` by tests.
+Errors that produce exceptions (division by zero, calling non-functions) raise integers,
+rather than symbols or strings. 
+This makes exception types easier to check, since we have `eq?` and `=`, but not `equal?`.
 
 1. Division by zero
 
@@ -128,7 +139,7 @@ Using integers is easier for checking exception types, since we have `eq?` and `
 
 4. Handling `void`
 
-   Programs that evaluate to void now print `(void)` instead of "unrecognized value 39".
+   Programs that evaluate to void now print `(void)` instead of `"unrecognized value 39"`.
 
    Implemented by adding a simple check in `header.cpp`:
    ```c++
@@ -138,5 +149,48 @@ Using integers is easier for checking exception types, since we have `eq?` and `
 
    Tested by `void-0.scm` and `void-1.scm`.
 
-*I, Jack Dai, pledge on my honor that I have not given or received any unauthorized
- assistance on this assignment.*
+5. Applying non-function values
+
+   Rather than seg-faulting, calling a non-function value now raises exception `5`.
+
+   Implemented by checking `procedure?` before each `apply` and function application.
+   Doing this in `top-level` lets us avoid checking the library functions added in `desugar`:
+   ```racket
+    [`(,f ,args ...)
+      (if (prim? f)
+        (map top-level (cons f args))
+        (let ([gf (gensym 'f)])
+          `(let ([,gf ,(top-level f)])
+             (if (procedure? ,gf)
+               (,gf ,@(map top-level args))
+               (raise '5)))))]
+    ; similar for apply
+   ```
+
+   Tested by `non-function-0.scm` and `non-function-1.scm`.
+
+#### Unbound variables
+
+Although this isn't a *run-time* error, I also added a more friendly error message for unbound variables.
+We just `raise` during `alphatize` if a variable isn't in scope:
+```racket
+  [(? symbol? x)
+    (hash-ref env x (lambda () (raise (~a "unbound variable: " x))))]
+```
+This is tested by `unbound.scm`.
+
+#### Other run-time errors
+
+- Using not-yet-initialized `letrec` or `letrec*` variables.
+
+  Currently, I artifically initialize variables to `'undefined`, which could "leak" into user code.
+  I considered solving this by initializing to `(lambda () (raise 'uninitialized))`, but that would require
+  modifying callsites as well, which is a lot of work.
+
+- Buffer overflow: it's possible to `vector-set!` somewhere out of bounds.
+
+- Integer overflow: `(+ 4294967296 1)` returns `1`.
+
+- `eq?` doesn't work for symbols, since they are strings under the hood.
+
+*I pledge on my honor that I have not given or received any unauthorized assistance on this assignment.*

@@ -205,7 +205,7 @@
             `(apply ,((alpha-rename env) e0)
                     ,((alpha-rename env) e1))]
            [(? symbol? x)
-            (hash-ref env x)]
+            (hash-ref env x (lambda () (raise (~a "unbound variable: " x))))]
            [`',dat
             `',dat]
            [`(,es ...)
