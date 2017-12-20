@@ -1,4 +1,4 @@
 *.ll
-!header.ll
 *out
 bin
+*.swp

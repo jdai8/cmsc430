@@ -3,6 +3,7 @@
 A Scheme compiler that targets LLVM IR.
 
 ```bash
+clang++ -std=c++11 -pthread header.cpp -S -emit-llvm -o header.ll
 racket compile.rkt tests/amb.scm
 ./amb
 racket tests.rkt all
@@ -58,15 +59,16 @@ racket tests.rkt all
 
 ## Part 2 - Error handling
 
-Tests that produce errors have a comment at the top with their expected value. 
+Tests that produce errors have a comment at the top with their expected value.
 This gets `read` by tests.
 Errors that produce exceptions (division by zero, calling non-functions) raise integers,
-rather than symbols or strings. 
+rather than symbols or strings.
 This makes exception types easier to check, since we have `eq?` and `=`, but not `equal?`.
 
 1. Division by zero
 
    Instead of throwing a floating point exception, programs now raise exception `1`.
+
    Implemented by adding a few lines to `desugar.rkt`:
    ```racket
     ; solve divide by zero
@@ -171,8 +173,9 @@ This makes exception types easier to check, since we have `eq?` and `=`, but not
 
 #### Unbound variables
 
-Although this isn't a *run-time* error, I also added a more friendly error message for unbound variables.
-We just `raise` during `alphatize` if a variable isn't in scope:
+Although this isn't a *run-time* error, I also added a more friendly compile-time error message for unbound variables.
+
+We can `raise` during `alphatize` if a variable isn't in scope:
 ```racket
   [(? symbol? x)
     (hash-ref env x (lambda () (raise (~a "unbound variable: " x))))]
@@ -185,7 +188,7 @@ This is tested by `unbound.scm`.
 
   Currently, I artifically initialize variables to `'undefined`, which could "leak" into user code.
   I considered solving this by initializing to `(lambda () (raise 'uninitialized))`, but that would require
-  modifying callsites as well, which is a lot of work.
+  modifying callsites as well, which is more work.
 
 - Buffer overflow: it's possible to `vector-set!` somewhere out of bounds.
 
