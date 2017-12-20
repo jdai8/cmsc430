@@ -1,0 +1,5 @@
+(define h (hash))
+(define h1 (hash-set h 1 2))
+(define h2 (hash-set h1 3 4))
+(define h3 (hash-remove h2 1))
+(hash-ref h3 1 (lambda () #f))

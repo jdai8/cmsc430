@@ -4,6 +4,9 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "stdint.h"
+#include "hamt/hamt.h"
+
+#define GC_MALLOC malloc
 
 #define CLO_TAG 0
 #define CONS_TAG 1
@@ -15,6 +18,7 @@
 
 
 #define VECTOR_OTHERTAG 1
+#define HASH_OTHERTAG 2
 // Hashes, Sets, gen records, can all be added here
 
 
@@ -222,6 +226,12 @@ u64 prim_print_aux(u64 v)
 {
     if (v == V_NULL)
         printf("()");
+    else if (v == V_VOID)
+        printf("'#<void>");
+    else if (v == V_TRUE)
+        printf("#t");
+    else if (v == V_FALSE)
+        printf("#f");
     else if ((v&7) == CLO_TAG)
         printf("#<procedure>");
     else if ((v&7) == CONS_TAG)
@@ -271,6 +281,10 @@ u64 prim_print(u64 v)
         printf("'()");
     else if (v == V_VOID)
         printf("(void)");
+    else if (v == V_TRUE)
+        printf("#t");
+    else if (v == V_FALSE)
+        printf("#f");
     else if ((v&7) == CLO_TAG)
         printf("#<procedure>");
     else if ((v&7) == CONS_TAG)
@@ -646,9 +660,100 @@ u64 prim_not(u64 a)
 GEN_EXPECT1ARGLIST(applyprim_not, prim_not)
 
 
+// HAMT
+class value
+{
+public:
+    const u64 x;
 
+    value(u64 x)
+        : x(x)
+    {}
+
+    u64 hash() const
+    {
+        const u8* data = reinterpret_cast<const u8*>(this);
+        u64 h = 0xcbf29ce484222325;
+        for (u32 i = 0; i < sizeof(value); ++i && ++data)
+        {
+            h = h ^ *data;
+            h = h * 0x100000001b3;
+        }
+
+        return h;
+    }
+
+    bool operator==(const value& t) const
+    {
+        return t.x == this->x;
+    }
+};
+
+u64 encode_hash(const hamt<value, value>* h) {
+    
+    u64 x = (u64)h;
+    u64* tagged = (u64*) alloc(1 + sizeof(x));
+    tagged[0] = HASH_OTHERTAG;
+    tagged[1] = x;
+    return ENCODE_OTHER(tagged);
 }
 
+u64 prim_hash() {
+    const hamt<value, value>* h = 
+      new ((hamt<value,value>*)GC_MALLOC(sizeof(hamt<value,value>))) hamt<value,value>();
 
+    return encode_hash(h);
+}
 
+u64 prim_hash_45ref(u64 h, u64 k, u64 f) {
+    
+    ASSERT_TAG(h, OTHER_TAG, "first argument to hash-ref must be a hashmap");
 
+    u64 *other = DECODE_OTHER(h);
+    if (other[0] != HASH_OTHERTAG)
+        fatal_err("hash-ref not given a properly formed vector");
+
+    const hamt<value, value>* hm = (const hamt<value, value>*) other[1];
+    const value* const kv = new ((value*)GC_MALLOC(sizeof(value))) value(k);
+    const value *v = hm->get(kv);
+    if (v == 0) {
+    
+        return V_FALSE;
+        /* not working ... "expected cons"
+          u64 *v = (u64*)f;
+          u64 (*g)(u64) = (u64(*)(u64))(v[0]);
+          return g(prim_cons(f, prim_cons(V_NULL, V_NULL)));
+          */
+    }
+    return v->x;
+}
+
+u64 prim_hash_45set(u64 h, u64 k, u64 v) {
+
+    ASSERT_TAG(h, OTHER_TAG, "first argument to hash-set must be a hashmap");
+
+    u64 *other = DECODE_OTHER(h);
+    if (other[0] != HASH_OTHERTAG)
+        fatal_err("hash-set not given a properly formed vector");
+
+    const hamt<value, value>* hm = (const hamt<value, value>*) other[1];
+    const value* const kv = new ((value*)GC_MALLOC(sizeof(value))) value(k);
+    const value* const vv = new ((value*)GC_MALLOC(sizeof(value))) value(v);
+
+    return encode_hash(hm->insert(kv, vv));
+}
+
+u64 prim_hash_45remove(u64 h, u64 k) {
+
+    ASSERT_TAG(h, OTHER_TAG, "first argument to hash-remove must be a hashmap");
+
+    u64 *other = DECODE_OTHER(h);
+    if (other[0] != HASH_OTHERTAG)
+        fatal_err("hash-remove not given a properly formed vector");
+
+    const hamt<value, value>* hm = (const hamt<value, value>*) other[1];
+    const value* const kv = new ((value*)GC_MALLOC(sizeof(value))) value(k);
+    return encode_hash(hm->remove(kv));
+}
+
+}

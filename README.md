@@ -3,10 +3,14 @@
 A Scheme compiler that targets LLVM IR.
 
 ```bash
-clang++ -std=c++11 -pthread header.cpp -S -emit-llvm -o header.ll
-racket compile.rkt tests/amb.scm
-./amb
-racket tests.rkt all
+$ make
+$ racket compile.rkt tests/amb.scm
+$ ./amb
+'(solution . (3 . (4 . (5 . ()))))
+$ racket tests.rkt all
+Test-final: expected #f, got 2
+Test hash-1.scm failed!
+Test coverage: 94.12%
 ```
 
 ## Part 1 - Primitive operations
@@ -59,11 +63,14 @@ racket tests.rkt all
 
 ## Part 2 - Error handling
 
+I've implemented some better handling of run-time errors. These errors now produce more helpful messages.
+
 Tests that produce errors have a comment at the top with their expected value.
-This gets `read` by tests.
+This gets `read` by testing code.
+
 Errors that produce exceptions (division by zero, calling non-functions) raise integers,
-rather than symbols or strings.
-This makes exception types easier to check, since we have `eq?` and `=`, but not `equal?`.
+rather than (uninterned) symbols or strings.
+I chose to do this because it makes exception types easier to check - we have `eq?` and `=`, but not `equal?`.
 
 1. Division by zero
 
@@ -139,14 +146,19 @@ This makes exception types easier to check, since we have `eq?` and `=`, but not
 
     Tested by `too-many-0.scm` and `too-many-1.scm`.
 
-4. Handling `void`
+4. Handling `(void)`, `#t`, and `#f`
 
    Programs that evaluate to void now print `(void)` instead of `"unrecognized value 39"`.
+   Similarly for `#t` and `#f`.
 
-   Implemented by adding a simple check in `header.cpp`:
+   Implemented by adding a few simple checks in `header.cpp`:
    ```c++
     else if (v == V_VOID)
         printf("(void)");
+    else if (v == V_TRUE)
+        printf("#t");
+    else if (v == V_FALSE)
+        printf("#f");
    ```
 
    Tested by `void-0.scm` and `void-1.scm`.
@@ -195,5 +207,42 @@ This is tested by `unbound.scm`.
 - Integer overflow: `(+ 4294967296 1)` returns `1`.
 
 - `eq?` doesn't work for symbols, since they are strings under the hood.
+
+## Part 3 - HAMT
+
+I've (partially) implemented `hash`, `hash-ref`, `hash-set`, and `hash-remove`, using Thomas Gilray's
+HAMT implementation.
+
+Unfortunately, my `hash-remove` does not completely work, as demonstrated by the test `hash-1.scm`.
+
+Also, when trying to implement the default thunk for `hash-ref`, I kept getting `"expected cons"` errors
+when trying to call the lambda.
+I thought this was because desugaring a zero-argument thunk adds an placeholder variable, and then we convert all
+lambdas to taking an argument list.
+However, after adding two `prim_cons`s, it still gives me the error.
+
+Please see my code at the bottom of `header.cpp`. Pull requests are appreciated ??.
+
+## Part 4 - Boehm GC
+
+I've attempted to implement the tagging portion of Boehm GC.
+I chose to use a tagging scheme that allocates a size 2 vector for each heap-allocated object.
+The first element of this vector holds the tag.
+In doing this, I made changes to `header.cpp` and `closure-convert.rkt`, where I modified `make-closure`,
+`env-ref`, and `clo-app` cases to properly handle boxed closures.
+However, this change led to many seg faults, and I've been unable to figure out why.
+As a result, the changes are on a separate branch, `tagging`.
+
+Again, any advice on how to fix this would be really appreciated.
+
+
+### Credits
+
+I used Thomas Gilray and Kristopher Micinski's HAMT implementation.
+
+I used Thomas Gilray's `cps.rkt` and `closure-convert.rkt`.
+
+While I would have liked to use the Boehm garbage collector, I didn't get there.
+
 
 *I pledge on my honor that I have not given or received any unauthorized assistance on this assignment.*
