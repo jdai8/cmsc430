@@ -92,7 +92,7 @@ I chose to do this because it makes exception types easier to check - we have `e
 
 2. Too few arguments
 
-   Instead of exposing a "expected cons" error, calling functions with too few arguments
+   Instead of exposing an "expected cons" error, calling functions with too few arguments
    now halts with the alarming, but more helpful value `'too-few-args!`.
 
    Implemented by adding `null?` checks in front of each `car` when pulling out named arguments.
@@ -221,7 +221,7 @@ I thought this was because desugaring a zero-argument thunk adds an placeholder 
 lambdas to taking an argument list.
 However, after adding two `prim_cons`s, it still gives me the error.
 
-Please see my code at the bottom of `header.cpp`. Pull requests are appreciated ??.
+Please see my code at the bottom of `header.cpp`. Pull requests are appreciated 😛.
 
 ## Part 4 - Boehm GC
 
@@ -236,7 +236,7 @@ As a result, the changes are on a separate branch, `tagging`.
 Again, any advice on how to fix this would be really appreciated.
 
 
-### Credits
+## Credits
 
 I used Thomas Gilray and Kristopher Micinski's HAMT implementation.
 
