@@ -418,7 +418,7 @@
            [`(let ([,x '()]) ,e0)
             (string-append
              (comment-line
-              "  %" (s-> x) " = add i64 0, 0"
+              "  %" (s-> x) " = call i64 @const_init_null()"
               "quoted ()")
              (e->llvm e0))]
            [`(let ([,x ',(? integer? dat)]) ,e0)
@@ -458,6 +458,11 @@
             (define n (match (car (filter (match-lambda [`(proc (,f . ,_) . ,_) (eq? f lamx)]) procs))
                              [`(proc (,lamx ,ys ...) . ,_) (length ys)]))
             (define f (gensym 'f))
+            (define gx (gensym 'gx))
+            (define gv (gensym 'gv))
+            (define i1 (gensym 'i1))
+            (define i0 (gensym 'i0))
+
             (apply string-append
                    `(,(comment-line
                        "  %" (s-> cptr) " = call i64* @alloc(i64 " (number->string (* (+ (length xs) 1) 8)) ")"
@@ -487,14 +492,44 @@
                        "  store i64 %" (s-> f) ", i64* %" (s-> fptrptr)
                        "store fptr")
                      ,(comment-line
-                      "  %" (s-> x) " = ptrtoint i64* %" (s-> cptr) " to i64"
+                      "  %" (s-> gx) " = ptrtoint i64* %" (s-> cptr) " to i64"
                       "closure cast; i64* -> i64")
+                     ,(comment-line
+                      "  %" (s-> gv) " = call i64* @alloc(i64 16)"
+                      "malloc vector")
+                     ,(comment-line
+                      "  %" (s-> i1) " = getelementptr inbounds i64, i64* %" (s-> gv) ", i64 1"
+                      "gep 1")
+                     ,(comment-line
+                      "  %" (s-> i0) " = getelementptr inbounds i64, i64* %" (s-> gv) ", i64 0"
+                      "gep 0")
+                     ,(comment-line
+                      "  store i64 4, i64* %" (s-> i0)
+                      "store clo tag")
+                     ,(comment-line
+                      "  store i64 %" (s-> gx) ", i64* %" (s-> i1)
+                      "store closure")
+                     ,(comment-line
+                      "  %" (s-> x) " = ptrtoint i64* %" (s-> gv) " to i64"
+                      "closure wrapper cast")
                      ,(e->llvm e0)))]
-           [`(let ([,x (env-ref ,y ,n)]) ,e0)
+           [`(let ([,x (env-ref ,yw ,n)]) ,e0)
             (define yptr (gensym 'envptr))
             (define iptr (gensym 'envptr))
+            (define wptr (gensym 'wptr))
+            (define i1 (gensym 'i1))
+            (define y (gensym 'y))
             (apply string-append
                    `(,(comment-line
+                       "  %" (s-> wptr) " = inttoptr i64 %" (s-> yw) " to i64*"
+                       "wrapper cast to i64*")
+                     ,(comment-line
+                       "  %" (s-> i1) " = getelementptr inbounds i64, i64* %" (s-> wptr) ", i64 1"
+                       "gep 1")
+                     ,(comment-line
+                       "  %" (s-> y) " = load i64, i64* %" (s-> i1) ", align 8"
+                       "load closure")
+                     ,(comment-line
                        "  %" (s-> yptr) " = inttoptr i64 %" (s-> y) " to i64*"
                        "closure/env cast; i64 -> i64*")
                      ,(comment-line
@@ -535,13 +570,25 @@
              (e->llvm e0)
              "\n" (s-> flab) ":\n"
              (e->llvm e1))]
-           [`(clo-app ,fx ,xs ...)
+           [`(clo-app ,fxw ,xs ...)
             (define cloptr (gensym 'cloptr))
             (define i0ptr (gensym 'i0ptr))
             (define fptr (gensym 'fptr))
             (define f (gensym 'f))
+            (define wptr (gensym 'wptr))
+            (define i1 (gensym 'i1))
+            (define fx (gensym 'fx))
             (apply string-append
              `(,(comment-line
+                 "  %" (s-> wptr) " = inttoptr i64 %" (s-> fxw) " to i64*"
+                 "wrapper cast to i64*")
+               ,(comment-line
+                 "  %" (s-> i1) " = getelementptr inbounds i64, i64* %" (s-> wptr) ", i64 1"
+                 "gep 1")
+               ,(comment-line
+                 "  %" (s-> fx) " = load i64, i64* %" (s-> i1) ", align 8"
+                 "load closure")
+               ,(comment-line
                  "  %" (s-> cloptr) " = inttoptr i64 %" (s-> fx) " to i64*"
                  "closure/env cast; i64 -> i64*")
                ,(comment-line
